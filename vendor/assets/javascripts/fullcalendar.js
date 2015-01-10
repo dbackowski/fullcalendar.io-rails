@@ -1,5 +1,3 @@
-//= require moment.min
-
 /*!
  * FullCalendar v2.2.5
  * Docs & License: http://arshaw.com/fullcalendar/

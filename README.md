@@ -1,12 +1,15 @@
-# Rails::Fullcalendar
+# Fullcalendar.io::Rails
 
 Asset pipeline bundling of the fullcalendar jquery plugin (http://fullcalendar.io).
 
 ## Installation
 
+This gem requires 'momentjs-rails'.
+
 Add this line to your application's Gemfile:
 
-    gem 'rails-fullcalendar'
+    gem 'momentjs-rails'
+    gem 'fullcalendar.io-rails'
 
 And then execute:
 
@@ -14,7 +17,7 @@ And then execute:
 
 Or install it yourself as:
 
-    $ gem install rails-fullcalendar
+    $ gem install momentjs-rails fullcalendar.io-rails
 
 In your application.css.scss:
 
@@ -22,6 +25,7 @@ In your application.css.scss:
 
 And in your application.js:
 
+    //= require moment
     //= require fullcalendar
 
 ## Usage
