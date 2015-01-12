@@ -1,5 +1,5 @@
 /*!
- * FullCalendar v2.2.5
+ * FullCalendar v2.2.6
  * Docs & License: http://arshaw.com/fullcalendar/
  * (c) 2013 Adam Shaw
  */
@@ -38,9 +38,9 @@ var defaults = {
 
 	weekNumberTitle: 'W',
 	weekNumberCalculation: 'local',
-
+	
 	//editable: false,
-
+	
 	// event ajax
 	lazyFetching: true,
 	startParam: 'start',
@@ -70,7 +70,7 @@ var defaults = {
 		prevYear: 'left-double-arrow',
 		nextYear: 'right-double-arrow'
 	},
-
+	
 	// jquery-ui theming
 	theme: false,
 	themeButtonIcons: {
@@ -83,20 +83,20 @@ var defaults = {
 	dragOpacity: .75,
 	dragRevertDuration: 500,
 	dragScroll: true,
-
+	
 	//selectable: false,
 	unselectAuto: true,
-
+	
 	dropAccept: '*',
 
 	eventLimit: false,
 	eventLimitText: 'more',
 	eventLimitClick: 'popover',
 	dayPopoverFormat: 'LL',
-
+	
 	handleWindowResize: true,
 	windowResizeDelay: 200 // milliseconds before an updateSize happens
-
+	
 };
 
 
@@ -128,7 +128,7 @@ var rtlDefaults = {
 
 ;;
 
-var fc = $.fullCalendar = { version: "2.2.5" };
+var fc = $.fullCalendar = { version: "2.2.6" };
 var fcViews = fc.views = {};
 
 
@@ -160,7 +160,7 @@ $.fn.fullCalendar = function(options) {
 			calendar.render();
 		}
 	});
-
+	
 	return res;
 };
 
@@ -412,7 +412,7 @@ function enableCursor() {
 
 // Given a total available height to fill, have `els` (essentially child rows) expand to accomodate.
 // By default, all elements that are shorter than the recommended height are expanded uniformly, not considering
-// any other els that are already too tall. if `shouldRedistribute` is on, it considers these tall rows and
+// any other els that are already too tall. if `shouldRedistribute` is on, it considers these tall rows and 
 // reduces the available height.
 function distributeHeight(els, availableHeight, shouldRedistribute) {
 
@@ -1030,7 +1030,7 @@ newMomentProto.stripTime = function() {
 		this.utc(); // set the internal UTC flag (will clear the ambig flags)
 		setUTCValues(this, a.slice(0, 3)); // set the year/month/date. time will be zero
 
-		// Mark the time as ambiguous. This needs to happen after the .utc() call, which calls .zone(),
+		// Mark the time as ambiguous. This needs to happen after the .utc() call, which calls .utcOffset(),
 		// which clears all ambig flags. Same with setUTCValues with moment-timezone.
 		this._ambigTime = true;
 		this._ambigZone = true; // if ambiguous time, also ambiguous timezone offset
@@ -1064,11 +1064,11 @@ newMomentProto.stripZone = function() {
 		setUTCValues(this, a); // will set the year/month/date/hours/minutes/seconds/ms
 
 		if (wasAmbigTime) {
-			// the above call to .utc()/.zone() unfortunately clears the ambig flags, so reassign
+			// the above call to .utc()/.utcOffset() unfortunately clears the ambig flags, so reassign
 			this._ambigTime = true;
 		}
 
-		// Mark the zone as ambiguous. This needs to happen after the .utc() call, which calls .zone(),
+		// Mark the zone as ambiguous. This needs to happen after the .utc() call, which calls .utcOffset(),
 		// which clears all ambig flags. Same with setUTCValues with moment-timezone.
 		this._ambigZone = true;
 	}
@@ -1081,18 +1081,23 @@ newMomentProto.hasZone = function() {
 	return !this._ambigZone;
 };
 
-// this method implicitly marks a zone (will get called upon .utc() and .local())
-newMomentProto.zone = function(tzo) {
+$.each([ 'utcOffset', 'zone' ], function(i, name) { // .zone() is moment-pre-2.9, has been deprecated
+	if (oldMomentProto[name]) {
 
-	if (tzo != null) { // setter
-		// these assignments needs to happen before the original zone method is called.
-		// I forget why, something to do with a browser crash.
-		this._ambigTime = false;
-		this._ambigZone = false;
+		// this method implicitly marks a zone (will get called upon .utc() and .local())
+		newMomentProto[name] = function(tzo) {
+
+			if (tzo != null) { // setter
+				// these assignments needs to happen before the original zone method is called.
+				// I forget why, something to do with a browser crash.
+				this._ambigTime = false;
+				this._ambigZone = false;
+			}
+
+			return oldMomentProto[name].apply(this, arguments);
+		};
 	}
-
-	return oldMomentProto.zone.apply(this, arguments);
-};
+});
 
 // this method implicitly marks a zone
 newMomentProto.local = function() {
@@ -4667,7 +4672,7 @@ DayGrid.mixin({
 			'<span class="fc-title">' +
 				(htmlEscape(event.title || '') || '&nbsp;') + // we always want one line of height
 			'</span>';
-
+		
 		return '<a class="' + classes.join(' ') + '"' +
 				(event.url ?
 					' href="' + htmlEscape(event.url) + '"' :
@@ -4790,7 +4795,7 @@ DayGrid.mixin({
 		// Give preference to elements with certain criteria, so they have
 		// a chance to be closer to the top.
 		segs.sort(compareSegs);
-
+		
 		for (i = 0; i < segs.length; i++) {
 			seg = segs[i];
 
@@ -6141,6 +6146,7 @@ var View = fc.View = Class.extend({
 
 	type: null, // subclass' view name (string)
 	name: null, // deprecated. use `type` instead
+	title: null, // the text that will be displayed in the header's title
 
 	calendar: null, // owner Calendar object
 	options: null, // view-specific options
@@ -6289,7 +6295,7 @@ var View = fc.View = Class.extend({
 
 	// Computes the new date when the user hits the prev button, given the current date
 	computePrevDate: function(date) {
-		return this.skipHiddenDays(
+		return this.massageCurrentDate(
 			date.clone().startOf(this.intervalUnit).subtract(this.intervalDuration), -1
 		);
 	},
@@ -6297,14 +6303,35 @@ var View = fc.View = Class.extend({
 
 	// Computes the new date when the user hits the next button, given the current date
 	computeNextDate: function(date) {
-		return this.skipHiddenDays(
+		return this.massageCurrentDate(
 			date.clone().startOf(this.intervalUnit).add(this.intervalDuration)
 		);
 	},
 
 
+	// Given an arbitrarily calculated current date of the calendar, returns a date that is ensured to be completely
+	// visible. `direction` is optional and indicates which direction the current date was being
+	// incremented or decremented (1 or -1).
+	massageCurrentDate: function(date, direction) {
+		if (this.intervalDuration <= moment.duration({ days: 1 })) { // if the view displays a single day or smaller
+			if (this.isHiddenDay(date)) {
+				date = this.skipHiddenDays(date, direction);
+				date.startOf('day');
+			}
+		}
+
+		return date;
+	},
+
+
 	/* Title and Date Formatting
 	------------------------------------------------------------------------------------------------------------------*/
+
+
+	// Sets the view's title property to the most updated computed value
+	updateTitle: function() {
+		this.title = this.computeTitle();
+	},
 
 
 	// Computes what the title at the top of the calendar should be for this view
@@ -6864,7 +6891,7 @@ var View = fc.View = Class.extend({
 
 ;;
 
-
+ 
 function Calendar(element, instanceOptions) {
 	var t = this;
 
@@ -6896,7 +6923,7 @@ function Calendar(element, instanceOptions) {
 	}
 
 
-
+	
 	// Exports
 	// -----------------------------------------------------------------------------------
 
@@ -6907,7 +6934,7 @@ function Calendar(element, instanceOptions) {
 	t.reportEvents = reportEvents;
 	t.reportEventChange = reportEventChange;
 	t.rerenderEvents = renderEvents; // `renderEvents` serves as a rerender. an API method
-	t.changeView = changeView;
+	t.changeView = renderView; // `renderView` will switch to another view
 	t.select = select;
 	t.unselect = unselect;
 	t.prev = prev;
@@ -7076,7 +7103,7 @@ function Calendar(element, instanceOptions) {
 	}
 
 
-
+	
 	// Imports
 	// -----------------------------------------------------------------------------------
 
@@ -7103,9 +7130,9 @@ function Calendar(element, instanceOptions) {
 	var ignoreWindowResize = 0;
 	var date;
 	var events = [];
-
-
-
+	
+	
+	
 	// Main Rendering
 	// -----------------------------------------------------------------------------------
 
@@ -7116,8 +7143,8 @@ function Calendar(element, instanceOptions) {
 	else {
 		date = t.getNow();
 	}
-
-
+	
+	
 	function render(inc) {
 		if (!content) {
 			initialRender();
@@ -7128,8 +7155,8 @@ function Calendar(element, instanceOptions) {
 			renderView(inc);
 		}
 	}
-
-
+	
+	
 	function initialRender() {
 		tm = options.theme ? 'ui' : 'fc';
 		element.addClass('fc');
@@ -7156,15 +7183,15 @@ function Calendar(element, instanceOptions) {
 			element.prepend(headerElement);
 		}
 
-		changeView(options.defaultView);
+		renderView(options.defaultView);
 
 		if (options.handleWindowResize) {
 			windowResizeProxy = debounce(windowResize, options.windowResizeDelay); // prevents rapid calls
 			$(window).resize(windowResizeProxy);
 		}
 	}
-
-
+	
+	
 	function destroy() {
 
 		if (currentView) {
@@ -7177,25 +7204,20 @@ function Calendar(element, instanceOptions) {
 
 		$(window).unbind('resize', windowResizeProxy);
 	}
-
-
+	
+	
 	function elementVisible() {
 		return element.is(':visible');
 	}
-
-
+	
+	
 
 	// View Rendering
 	// -----------------------------------------------------------------------------------
 
 
-	function changeView(viewType) {
-		renderView(0, viewType);
-	}
-
-
 	// Renders a view because of a date change, view-type change, or for the first time
-	function renderView(delta, viewType) {
+	function renderView(viewType) {
 		ignoreWindowResize++;
 
 		// if viewType is changing, destroy the old view
@@ -7218,18 +7240,12 @@ function Calendar(element, instanceOptions) {
 
 		if (currentView) {
 
-			// let the view determine what the delta means
-			if (delta < 0) {
-				date = currentView.computePrevDate(date);
-			}
-			else if (delta > 0) {
-				date = currentView.computeNextDate(date);
-			}
+			// in case the view should render a period of time that is completely hidden
+			date = currentView.massageCurrentDate(date);
 
 			// render or rerender the view
 			if (
 				!currentView.start || // never rendered before
-				delta || // explicit date window change
 				!date.isWithin(currentView.intervalStart, currentView.intervalEnd) // implicit date window change
 			) {
 				if (elementVisible()) {
@@ -7354,8 +7370,8 @@ function Calendar(element, instanceOptions) {
 			return spec.buttonText;
 		}
 	}
-
-
+	
+	
 
 	// Resizing
 	// -----------------------------------------------------------------------------------
@@ -7372,8 +7388,8 @@ function Calendar(element, instanceOptions) {
 	t.isHeightAuto = function() {
 		return options.contentHeight === 'auto' || options.height === 'auto';
 	};
-
-
+	
+	
 	function updateSize(shouldRecalc) {
 		if (elementVisible()) {
 
@@ -7395,8 +7411,8 @@ function Calendar(element, instanceOptions) {
 			_calcSize();
 		}
 	}
-
-
+	
+	
 	function _calcSize() { // assumes elementVisible
 		if (typeof options.contentHeight === 'number') { // exists and not 'auto'
 			suggestedViewHeight = options.contentHeight;
@@ -7408,8 +7424,8 @@ function Calendar(element, instanceOptions) {
 			suggestedViewHeight = Math.round(content.width() / Math.max(options.aspectRatio, .5));
 		}
 	}
-
-
+	
+	
 	function windowResize(ev) {
 		if (
 			!ignoreWindowResize &&
@@ -7421,9 +7437,9 @@ function Calendar(element, instanceOptions) {
 			}
 		}
 	}
-
-
-
+	
+	
+	
 	/* Event Fetching/Rendering
 	-----------------------------------------------------------------------------*/
 	// TODO: going forward, most of this stuff should be directly handled by the view
@@ -7450,7 +7466,7 @@ function Calendar(element, instanceOptions) {
 		currentView.destroyViewEvents();
 		unfreezeContentHeight();
 	}
-
+	
 
 	function getAndRenderEvents() {
 		if (!options.lazyFetching || isFetchNeeded(currentView.start, currentView.end)) {
@@ -7468,7 +7484,7 @@ function Calendar(element, instanceOptions) {
 			// ... which will call renderEvents
 	}
 
-
+	
 	// called when event data arrives
 	function reportEvents(_events) {
 		events = _events;
@@ -7488,7 +7504,8 @@ function Calendar(element, instanceOptions) {
 
 
 	function updateTitle() {
-		header.updateTitle(currentView.computeTitle());
+		currentView.updateTitle();
+		header.updateTitle(currentView.title);
 	}
 
 
@@ -7501,12 +7518,12 @@ function Calendar(element, instanceOptions) {
 			header.enableButton('today');
 		}
 	}
-
+	
 
 
 	/* Selection
 	-----------------------------------------------------------------------------*/
-
+	
 
 	function select(start, end) {
 
@@ -7523,54 +7540,56 @@ function Calendar(element, instanceOptions) {
 
 		currentView.select({ start: start, end: end }); // accepts a range
 	}
-
+	
 
 	function unselect() { // safe to be called before renderView
 		if (currentView) {
 			currentView.unselect();
 		}
 	}
-
-
-
+	
+	
+	
 	/* Date
 	-----------------------------------------------------------------------------*/
-
-
+	
+	
 	function prev() {
-		renderView(-1);
+		date = currentView.computePrevDate(date);
+		renderView();
 	}
-
-
+	
+	
 	function next() {
-		renderView(1);
+		date = currentView.computeNextDate(date);
+		renderView();
 	}
-
-
+	
+	
 	function prevYear() {
 		date.add(-1, 'years');
 		renderView();
 	}
-
-
+	
+	
 	function nextYear() {
 		date.add(1, 'years');
 		renderView();
 	}
-
-
+	
+	
 	function today() {
 		date = t.getNow();
 		renderView();
 	}
-
-
+	
+	
 	function gotoDate(dateInput) {
 		date = t.moment(dateInput);
 		renderView();
 	}
-
-
+	
+	
 	function incrementDate(delta) {
 		date.add(moment.duration(delta));
 		renderView();
@@ -7599,10 +7618,10 @@ function Calendar(element, instanceOptions) {
 		}
 
 		date = newDate;
-		changeView(viewType);
+		renderView(viewType);
 	}
-
-
+	
+	
 	function getDate() {
 		return date.clone();
 	}
@@ -7629,23 +7648,23 @@ function Calendar(element, instanceOptions) {
 			overflow: ''
 		});
 	}
-
-
-
+	
+	
+	
 	/* Misc
 	-----------------------------------------------------------------------------*/
-
+	
 
 	function getCalendar() {
 		return t;
 	}
 
-
+	
 	function getView() {
 		return currentView;
 	}
-
-
+	
+	
 	function option(name, value) {
 		if (value === undefined) {
 			return options[name];
@@ -7655,8 +7674,8 @@ function Calendar(element, instanceOptions) {
 			updateSize(true); // true = allow recalculation of height
 		}
 	}
-
-
+	
+	
 	function trigger(name, thisObj) {
 		if (options[name]) {
 			return options[name].apply(
@@ -7676,7 +7695,7 @@ function Calendar(element, instanceOptions) {
 
 function Header(calendar, options) {
 	var t = this;
-
+	
 	// exports
 	t.render = render;
 	t.destroy = destroy;
@@ -7686,7 +7705,7 @@ function Header(calendar, options) {
 	t.disableButton = disableButton;
 	t.enableButton = enableButton;
 	t.getViewsWithButtons = getViewsWithButtons;
-
+	
 	// locals
 	var el = $();
 	var viewsWithButtons = [];
@@ -7708,13 +7727,13 @@ function Header(calendar, options) {
 			return el;
 		}
 	}
-
-
+	
+	
 	function destroy() {
 		el.remove();
 	}
-
-
+	
+	
 	function renderSection(position) {
 		var sectionEl = $('<div class="fc-' + position + '"/>');
 		var buttonStr = options.header[position];
@@ -7857,32 +7876,32 @@ function Header(calendar, options) {
 
 		return sectionEl;
 	}
-
-
+	
+	
 	function updateTitle(text) {
 		el.find('h2').text(text);
 	}
-
-
+	
+	
 	function activateButton(buttonName) {
 		el.find('.fc-' + buttonName + '-button')
 			.addClass(tm + '-state-active');
 	}
-
-
+	
+	
 	function deactivateButton(buttonName) {
 		el.find('.fc-' + buttonName + '-button')
 			.removeClass(tm + '-state-active');
 	}
-
-
+	
+	
 	function disableButton(buttonName) {
 		el.find('.fc-' + buttonName + '-button')
 			.attr('disabled', 'disabled')
 			.addClass(tm + '-state-disabled');
 	}
-
-
+	
+	
 	function enableButton(buttonName) {
 		el.find('.fc-' + buttonName + '-button')
 			.removeAttr('disabled')
@@ -7911,8 +7930,8 @@ var eventGUID = 1;
 
 function EventManager(options) { // assumed to be a calendar
 	var t = this;
-
-
+	
+	
 	// exports
 	t.isFetchNeeded = isFetchNeeded;
 	t.fetchEvents = fetchEvents;
@@ -7925,14 +7944,14 @@ function EventManager(options) { // assumed to be a calendar
 	t.mutateEvent = mutateEvent;
 	t.normalizeEventDateProps = normalizeEventDateProps;
 	t.ensureVisibleEventRange = ensureVisibleEventRange;
-
-
+	
+	
 	// imports
 	var trigger = t.trigger;
 	var getView = t.getView;
 	var reportEvents = t.reportEvents;
-
-
+	
+	
 	// locals
 	var stickySource = { events: [] };
 	var sources = [ stickySource ];
@@ -7952,21 +7971,21 @@ function EventManager(options) { // assumed to be a calendar
 			}
 		}
 	);
-
-
-
+	
+	
+	
 	/* Fetching
 	-----------------------------------------------------------------------------*/
-
-
+	
+	
 	function isFetchNeeded(start, end) {
 		return !rangeStart || // nothing has been fetched yet?
 			// or, a part of the new range is outside of the old range? (after normalizing)
 			start.clone().stripZone() < rangeStart.clone().stripZone() ||
 			end.clone().stripZone() > rangeEnd.clone().stripZone();
 	}
-
-
+	
+	
 	function fetchEvents(start, end) {
 		rangeStart = start;
 		rangeEnd = end;
@@ -7978,8 +7997,8 @@ function EventManager(options) { // assumed to be a calendar
 			fetchEventSource(sources[i], fetchID);
 		}
 	}
-
-
+	
+	
 	function fetchEventSource(source, fetchID) {
 		_fetchEventSource(source, function(eventInputs) {
 			var isArraySource = $.isArray(source.events);
@@ -8015,8 +8034,8 @@ function EventManager(options) { // assumed to be a calendar
 			}
 		});
 	}
-
-
+	
+	
 	function _fetchEventSource(source, callback) {
 		var i;
 		var fetchers = fc.sourceFetchers;
@@ -8125,12 +8144,12 @@ function EventManager(options) { // assumed to be a calendar
 			}
 		}
 	}
-
-
-
+	
+	
+	
 	/* Sources
 	-----------------------------------------------------------------------------*/
-
+	
 
 	function addEventSource(sourceInput) {
 		var source = buildEventSource(sourceInput);
@@ -8212,9 +8231,9 @@ function EventManager(options) { // assumed to be a calendar
 		) ||
 		source; // the given argument *is* the primitive
 	}
-
-
-
+	
+	
+	
 	/* Manipulation
 	-----------------------------------------------------------------------------*/
 
@@ -8256,7 +8275,7 @@ function EventManager(options) { // assumed to be a calendar
 		return !/^_|^(id|allDay|start|end)$/.test(name);
 	}
 
-
+	
 	// returns the expanded events that were created
 	function renderEvent(eventInput, stick) {
 		var abstractEvent = buildEventFromInput(eventInput);
@@ -8285,8 +8304,8 @@ function EventManager(options) { // assumed to be a calendar
 
 		return [];
 	}
-
-
+	
+	
 	function removeEvents(filter) {
 		var eventID;
 		var i;
@@ -8315,8 +8334,8 @@ function EventManager(options) { // assumed to be a calendar
 
 		reportEvents(cache);
 	}
-
-
+	
+	
 	function clientEvents(filter) {
 		if ($.isFunction(filter)) {
 			return $.grep(cache, filter);
@@ -8329,28 +8348,28 @@ function EventManager(options) { // assumed to be a calendar
 		}
 		return cache; // else, return all
 	}
-
-
-
+	
+	
+	
 	/* Loading State
 	-----------------------------------------------------------------------------*/
-
-
+	
+	
 	function pushLoading() {
 		if (!(loadingLevel++)) {
 			trigger('loading', null, true, getView());
 		}
 	}
-
-
+	
+	
 	function popLoading() {
 		if (!(--loadingLevel)) {
 			trigger('loading', null, false, getView());
 		}
 	}
-
-
-
+	
+	
+	
 	/* Event Normalization
 	-----------------------------------------------------------------------------*/
 
@@ -9310,13 +9329,12 @@ var MonthView = fcViews.month = BasicView.extend({
 	// Produces information about what range to display
 	computeRange: function(date) {
 		var range = BasicView.prototype.computeRange.call(this, date); // get value from super-method
+		var rowCnt;
 
+		// ensure 6 weeks
 		if (this.isFixedWeeks()) {
-			// ensure 6 weeks
-			range.end.add(
-				6 - range.end.diff(range.start, 'weeks'),
-				'weeks'
-			);
+			rowCnt = Math.ceil(range.end.diff(range.start, 'weeks', true)); // could be partial weeks due to hiddenDays
+			range.end.add(6 - rowCnt, 'weeks');
 		}
 
 		return range;
