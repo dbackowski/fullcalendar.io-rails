@@ -1,4 +1,4 @@
-# Fullcalendar.io::Rails
+# Fullcalendar.io::Rails [![Build Status](https://travis-ci.org/dbackowski/fullcalendar.io-rails.svg?branch=master)](https://travis-ci.org/dbackowski/fullcalendar.io-rails)
 
 Asset pipeline bundling of the fullcalendar jquery plugin (http://fullcalendar.io).
 

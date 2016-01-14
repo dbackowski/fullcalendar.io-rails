@@ -17,9 +17,14 @@ Gem::Specification.new do |spec|
   spec.executables   = spec.files.grep(%r{^bin/}) { |f| File.basename(f) }
   spec.test_files    = spec.files.grep(%r{^(test|spec|features)/})
   spec.require_paths = ["lib"]
+  spec.test_files    = Dir["spec/**/*"]
 
   spec.add_runtime_dependency 'jquery-rails', '>= 3.1.0', '< 5.0'
   spec.add_runtime_dependency 'momentjs-rails', '~> 2.8', '>= 2.8.4'
   spec.add_development_dependency "bundler", "~> 1.7"
   spec.add_development_dependency "rake", "~> 10.0"
+  spec.add_development_dependency 'rails', '4.2.5'
+  spec.add_development_dependency 'rspec-rails'
+  spec.add_development_dependency 'capybara'
+  spec.add_development_dependency 'sqlite3'
 end
