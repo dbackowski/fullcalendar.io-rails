@@ -11,8 +11,8 @@ feature 'Assets integration' do
     expect(page.status_code).to be 200
   end
 
-  it 'provides fullcalendar/lang/pl.js on the asset pipeline' do
-    visit '/assets/fullcalendar/lang/pl.js'
+  it 'provides fullcalendar/locale/pl.js on the asset pipeline' do
+    visit '/assets/fullcalendar/locale/pl.js'
     expect(page.status_code).to be 200
   end
 

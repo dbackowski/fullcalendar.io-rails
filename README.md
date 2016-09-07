@@ -28,10 +28,10 @@ And in your application.js:
     //= require moment
     //= require fullcalendar
 
-Language files, gcal.js and lang-all.js are located under "fullcalendar" subdirectory.
+Language files, gcal.js and locale-all.js are located under "fullcalendar" subdirectory.
 
     //= require fullcalendar/gcal
-    //= require fullcalendar/lang/pl
+    //= require fullcalendar/locale/pl
 
 ## Usage
 
