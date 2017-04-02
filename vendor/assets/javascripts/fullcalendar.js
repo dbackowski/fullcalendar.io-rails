@@ -1,5 +1,5 @@
 /*!
- * FullCalendar v3.3.0
+ * FullCalendar v3.3.1
  * Docs & License: https://fullcalendar.io/
  * (c) 2017 Adam Shaw
  */
@@ -19,11 +19,11 @@
 ;;
 
 var FC = $.fullCalendar = {
-	version: "3.3.0",
+	version: "3.3.1",
 	// When introducing internal API incompatibilities (where fullcalendar plugins would break),
 	// the minor version of the calendar should be upped (ex: 2.7.2 -> 2.8.0)
 	// and the below integer should be incremented.
-	internalApiVersion: 8
+	internalApiVersion: 9
 };
 var fcViews = FC.views = {};
 
@@ -277,6 +277,7 @@ function getOuterRect(el, origin) {
 // Queries the area within the margin/border/scrollbars of a jQuery element. Does not go within the padding.
 // Returns a rectangle with absolute coordinates: left, right (exclusive), top, bottom (exclusive).
 // Origin is optional.
+// WARNING: given element can't have borders
 // NOTE: should use clientLeft/clientTop, but very unreliable cross-browser.
 function getClientRect(el, origin) {
 	var offset = el.offset();
@@ -313,10 +314,11 @@ function getContentRect(el, origin) {
 
 
 // Returns the computed left/right/top/bottom scrollbar widths for the given jQuery element.
+// WARNING: given element can't have borders (which will cause offsetWidth/offsetHeight to be larger).
 // NOTE: should use clientLeft/clientTop, but very unreliable cross-browser.
 function getScrollbarWidths(el) {
-	var leftRightWidth = el.innerWidth() - el[0].clientWidth; // the paddings cancel out, leaving the scrollbars
-	var bottomWidth = el.innerHeight() - el[0].clientHeight; // "
+	var leftRightWidth = el[0].offsetWidth - el[0].clientWidth;
+	var bottomWidth = el[0].offsetHeight - el[0].clientHeight;
 	var widths;
 
 	leftRightWidth = sanitizeScrollbarWidth(leftRightWidth);
@@ -677,6 +679,19 @@ function computeGreatestUnit(start, end) {
 	}
 
 	return unit; // will be "milliseconds" if nothing else matches
+}
+
+
+// like computeGreatestUnit, but has special abilities to interpret the source input for clues
+function computeDurationGreatestUnit(duration, durationInput) {
+	var unit = computeGreatestUnit(duration);
+
+	// prevent days:7 from being interpreted as a week
+	if (unit === 'week' && typeof durationInput === 'object' && durationInput.days) {
+		unit = 'day';
+	}
+
+	return unit;
 }
 
 
@@ -8960,7 +8975,7 @@ var View = FC.View = Class.extend(EmitterMixin, ListenerMixin, {
 		var isReset = this.isDateSet;
 
 		this.isDateSet = true;
-		this.handleDate(date, isReset);
+		this.handleRawDate(date);
 		this.trigger(isReset ? 'dateReset' : 'dateSet', date);
 	},
 
@@ -8978,12 +8993,31 @@ var View = FC.View = Class.extend(EmitterMixin, ListenerMixin, {
 	// -----------------------------------------------------------------------------------------------------------------
 
 
-	handleDate: function(date, isReset) {
+	handleRawDate: function(date) {
+		var _this = this;
+		var dateProfile = this.buildDateProfile(date, null, true); // forceToValid=true
+
+		if (!this.isSameDateProfile(dateProfile)) { // real change
+			this.handleDate(dateProfile);
+		}
+		else {
+			// View might have no date change, but still needs to render (because of a view unrender/rerender).
+			// Wait for possible queued unrenders. TODO: refactor.
+			this.dateRenderQueue.add(function() {
+				if (!_this.isDateRendered) {
+					_this.handleDate(dateProfile);
+				}
+			});
+		}
+	},
+
+
+	handleDate: function(dateProfile) {
 		var _this = this;
 
 		this.unbindEvents(); // will do nothing if not already bound
-		this.requestDateRender(date).then(function() {
-			// wish we could start earlier, but setRangeFromDate needs to execute first
+		this.requestDateRender(dateProfile).then(function() {
+			// wish we could start earlier, but setDateProfile needs to execute first
 			_this.bindEvents(); // will request events
 		});
 	},
@@ -8999,12 +9033,12 @@ var View = FC.View = Class.extend(EmitterMixin, ListenerMixin, {
 	// -----------------------------------------------------------------------------------------------------------------
 
 
-	// if date not specified, uses current
-	requestDateRender: function(date) {
+	// if dateProfile not specified, uses current
+	requestDateRender: function(dateProfile) {
 		var _this = this;
 
 		return this.dateRenderQueue.add(function() {
-			return _this.executeDateRender(date);
+			return _this.executeDateRender(dateProfile);
 		});
 	},
 
@@ -9022,50 +9056,46 @@ var View = FC.View = Class.extend(EmitterMixin, ListenerMixin, {
 	// -----------------------------------------------------------------------------------------------------------------
 
 
-	// if date not specified, uses current
-	executeDateRender: function(date) {
+	// if dateProfile not specified, uses current
+	executeDateRender: function(dateProfile) {
 		var _this = this;
-		var rangeChanged = false;
 
-		if (date) {
-			rangeChanged = _this.setRangeFromDate(date);
+		if (dateProfile) {
+			_this.setDateProfile(dateProfile);
 		}
 
-		if (!date || rangeChanged || !_this.isDateRendered) { // should render?
+		this.updateTitle();
+		this.calendar.updateToolbarButtons();
 
-			// if rendering a new date, reset scroll to initial state (scrollTime)
-			if (date) {
-				this.captureInitialScroll();
-			}
-			else {
-				this.captureScroll(); // a rerender of the current date
-			}
-
-			this.freezeHeight();
-
-			// potential issue: date-unrendering will happen with the *new* range
-			return this.executeDateUnrender().then(function() {
-
-				if (_this.render) {
-					_this.render(); // TODO: deprecate
-				}
-
-				_this.renderDates();
-				_this.updateSize();
-				_this.renderBusinessHours(); // might need coordinates, so should go after updateSize()
-				_this.startNowIndicator();
-
-				_this.thawHeight();
-				_this.releaseScroll();
-
-				_this.isDateRendered = true;
-				_this.onDateRender();
-				_this.trigger('dateRender');
-			});
+		// if rendering a new date, reset scroll to initial state (scrollTime)
+		if (dateProfile) {
+			this.captureInitialScroll();
 		}
 		else {
-			return Promise.resolve();
+			this.captureScroll(); // a rerender of the current date
 		}
+
+		this.freezeHeight();
+
+		// potential issue: date-unrendering will happen with the *new* range
+		return this.executeDateUnrender().then(function() {
+
+			if (_this.render) {
+				_this.render(); // TODO: deprecate
+			}
+
+			_this.renderDates();
+			_this.updateSize();
+			_this.renderBusinessHours(); // might need coordinates, so should go after updateSize()
+			_this.startNowIndicator();
+
+			_this.thawHeight();
+			_this.releaseScroll();
+
+			_this.isDateRendered = true;
+			_this.onDateRender();
+			_this.trigger('dateRender');
+		});
 	},
 
 
@@ -10077,63 +10107,51 @@ View.mixin({
 	------------------------------------------------------------------------------------------------------------------*/
 
 
-	// Updates all internal dates/ranges for eventual rendering around the given date.
-	// Returns a boolean about whether there was some sort of change.
-	setRangeFromDate: function(date) {
+	isSameDateProfile: function(dateProfile) {
+		return this.activeRange && isRangesEqual(this.activeRange, dateProfile.activeRange);
+	},
 
-		var rangeInfo = this.buildRangeInfo(date);
 
-		// some sort of change? (TODO: compare other ranges too?)
-		if (!this.activeRange || !isRangesEqual(this.activeRange, rangeInfo.activeRange)) {
+	setDateProfile: function(dateProfile) {
+		this.currentRange = dateProfile.currentRange;
+		this.currentRangeUnit = dateProfile.currentRangeUnit;
+		this.renderRange = dateProfile.renderRange;
+		this.activeRange = dateProfile.activeRange;
+		this.validRange = dateProfile.validRange;
+		this.dateIncrement = dateProfile.dateIncrement;
+		this.currentDate = dateProfile.date;
+		this.minTime = dateProfile.minTime;
+		this.maxTime = dateProfile.maxTime;
 
-			this.currentRange = rangeInfo.currentRange;
-			this.currentRangeUnit = rangeInfo.currentRangeUnit;
-			this.renderRange = rangeInfo.renderRange;
-			this.activeRange = rangeInfo.activeRange;
-			this.validRange = rangeInfo.validRange;
-			this.dateIncrement = rangeInfo.dateIncrement;
-			this.currentDate = rangeInfo.date;
-			this.minTime = rangeInfo.minTime;
-			this.maxTime = rangeInfo.maxTime;
-
-			// DEPRECATED, but we need to keep it updated
-			this.start = rangeInfo.activeRange.start;
-			this.end = rangeInfo.activeRange.end;
-			this.intervalStart = rangeInfo.currentRange.start;
-			this.intervalEnd = rangeInfo.currentRange.end;
-
-			this.updateTitle();
-			this.calendar.updateToolbarButtons();
-
-			return true;
-		}
-
-		return false;
+		// DEPRECATED, but we need to keep it updated
+		this.start = dateProfile.activeRange.start;
+		this.end = dateProfile.activeRange.end;
+		this.intervalStart = dateProfile.currentRange.start;
+		this.intervalEnd = dateProfile.currentRange.end;
 	},
 
 
 	// Builds a structure with info about what the dates/ranges will be for the "prev" view.
-	buildPrevRangeInfo: function(date) {
+	buildPrevDateProfile: function(date) {
 		var prevDate = date.clone().startOf(this.currentRangeUnit).subtract(this.dateIncrement);
 
-		return this.buildRangeInfo(prevDate, -1);
+		return this.buildDateProfile(prevDate, -1);
 	},
 
 
 	// Builds a structure with info about what the dates/ranges will be for the "next" view.
-	buildNextRangeInfo: function(date) {
+	buildNextDateProfile: function(date) {
 		var nextDate = date.clone().startOf(this.currentRangeUnit).add(this.dateIncrement);
 
-		return this.buildRangeInfo(nextDate, 1);
+		return this.buildDateProfile(nextDate, 1);
 	},
 
 
 	// Builds a structure holding dates/ranges for rendering around the given date.
 	// Optional direction param indicates whether the date is being incremented/decremented
 	// from its previous value. decremented = -1, incremented = 1 (default).
-	buildRangeInfo: function(givenDate, direction) {
+	buildDateProfile: function(date, direction, forceToValid) {
 		var validRange = this.buildValidRange();
-		var constrainedDate = constrainDate(givenDate, validRange);
 		var minTime = null;
 		var maxTime = null;
 		var currentInfo;
@@ -10141,7 +10159,11 @@ View.mixin({
 		var activeRange;
 		var isValid;
 
-		currentInfo = this.buildCurrentRangeInfo(constrainedDate, direction);
+		if (forceToValid) {
+			date = constrainDate(date, validRange);
+		}
+
+		currentInfo = this.buildCurrentRangeInfo(date, direction);
 		renderRange = this.buildRenderRange(currentInfo.range, currentInfo.unit);
 		activeRange = cloneRange(renderRange);
 
@@ -10154,12 +10176,11 @@ View.mixin({
 		this.adjustActiveRange(activeRange, minTime, maxTime);
 
 		activeRange = constrainRange(activeRange, validRange);
-		constrainedDate = constrainDate(constrainedDate, activeRange);
+		date = constrainDate(date, activeRange);
 
 		// it's invalid if the originally requested date is not contained,
 		// or if the range is completely outside of the valid range.
-		isValid = isDateWithinRange(givenDate, currentInfo.range) &&
-			doRangesIntersect(currentInfo.range, validRange);
+		isValid = doRangesIntersect(currentInfo.range, validRange);
 
 		return {
 			validRange: validRange,
@@ -10170,7 +10191,7 @@ View.mixin({
 			minTime: minTime,
 			maxTime: maxTime,
 			isValid: isValid,
-			date: constrainedDate,
+			date: date,
 			dateIncrement: this.buildDateIncrement(currentInfo.duration)
 				// pass a fallback (might be null) ^
 		};
@@ -10186,7 +10207,7 @@ View.mixin({
 
 	// Builds a structure with info about the "current" range, the range that is
 	// highlighted as being the current month for example.
-	// See buildRangeInfo for a description of `direction`.
+	// See buildDateProfile for a description of `direction`.
 	// Guaranteed to have `range` and `unit` properties. `duration` is optional.
 	buildCurrentRangeInfo: function(date, direction) {
 		var duration = null;
@@ -10274,9 +10295,11 @@ View.mixin({
 	// Builds the "current" range when it is specified as an explicit duration.
 	// `unit` is the already-computed computeGreatestUnit value of duration.
 	buildRangeFromDuration: function(date, direction, duration, unit) {
-		var customAlignment = this.opt('dateAlignment');
+		var alignment = this.opt('dateAlignment');
 		var start = date.clone();
 		var end;
+		var dateIncrementInput;
+		var dateIncrementDuration;
 
 		// if the view displays a single day or smaller
 		if (duration.as('days') <= 1) {
@@ -10286,7 +10309,27 @@ View.mixin({
 			}
 		}
 
-		start.startOf(customAlignment || unit);
+		// compute what the alignment should be
+		if (!alignment) {
+			dateIncrementInput = this.opt('dateIncrement');
+
+			if (dateIncrementInput) {
+				dateIncrementDuration = moment.duration(dateIncrementInput);
+
+				// use the smaller of the two units
+				if (dateIncrementDuration < duration) {
+					alignment = computeDurationGreatestUnit(dateIncrementDuration, dateIncrementInput);
+				}
+				else {
+					alignment = unit;
+				}
+			}
+			else {
+				alignment = unit;
+			}
+		}
+
+		start.startOf(alignment);
 		end = start.clone().add(duration);
 
 		return { start: start, end: end };
@@ -11021,12 +11064,7 @@ var Calendar = FC.Calendar = Class.extend({
 
 			if (duration.valueOf()) { // valid?
 
-				unit = computeGreatestUnit(duration);
-
-				// prevent days:7 from being interpreted as a week
-				if (unit === 'week' && typeof durationInput === 'object' && durationInput.days) {
-					unit = 'day';
-				}
+				unit = computeDurationGreatestUnit(duration, durationInput);
 
 				spec.duration = duration;
 				spec.durationUnit = unit;
@@ -11182,7 +11220,7 @@ var Calendar = FC.Calendar = Class.extend({
 
 
 	prev: function() {
-		var prevInfo = this.view.buildPrevRangeInfo(this.currentDate);
+		var prevInfo = this.view.buildPrevDateProfile(this.currentDate);
 
 		if (prevInfo.isValid) {
 			this.currentDate = prevInfo.date;
@@ -11192,7 +11230,7 @@ var Calendar = FC.Calendar = Class.extend({
 
 
 	next: function() {
-		var nextInfo = this.view.buildNextRangeInfo(this.currentDate);
+		var nextInfo = this.view.buildNextDateProfile(this.currentDate);
 
 		if (nextInfo.isValid) {
 			this.currentDate = nextInfo.date;
@@ -11852,9 +11890,9 @@ function Calendar_constructor(element, overrides) {
 
 	t.updateToolbarButtons = function() {
 		var now = t.getNow();
-		var todayInfo = currentView.buildRangeInfo(now);
-		var prevInfo = currentView.buildPrevRangeInfo(t.currentDate);
-		var nextInfo = currentView.buildNextRangeInfo(t.currentDate);
+		var todayInfo = currentView.buildDateProfile(now);
+		var prevInfo = currentView.buildPrevDateProfile(t.currentDate);
+		var nextInfo = currentView.buildNextDateProfile(t.currentDate);
 
 		toolbarsManager.proxyCall(
 			(todayInfo.isValid && !isDateWithinRange(now, currentView.currentRange)) ?
