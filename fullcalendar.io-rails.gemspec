@@ -6,7 +6,7 @@ require 'fullcalendar.io/rails/version'
 Gem::Specification.new do |spec|
   spec.name          = "fullcalendar.io-rails"
   spec.version       = Fullcalendario::Rails::VERSION
-  spec.authors       = ["dbackowski"]
+  spec.authors       = ["Damian Baćkowski"]
   spec.email         = ["damianbackowski@gmail.com"]
   spec.summary       = %q{FullCalendar is a jQuery plugin that provides a full-sized, drag & drop event calendar like the one below. It uses AJAX to fetch events on-the-fly and is easily configured to use your own feed format. It is visually customizable with a rich API.}
   spec.description   = %q{Asset pipeline bundling of the fullcalendar jquery plugin.}
