@@ -1,5 +1,5 @@
 /*!
- * FullCalendar v3.5.0
+ * FullCalendar v3.5.1
  * Docs & License: https://fullcalendar.io/
  * (c) 2017 Adam Shaw
  */
@@ -19,11 +19,11 @@
 ;;
 
 var FC = $.fullCalendar = {
-	version: "3.5.0",
+	version: "3.5.1",
 	// When introducing internal API incompatibilities (where fullcalendar plugins would break),
 	// the minor version of the calendar should be upped (ex: 2.7.2 -> 2.8.0)
 	// and the below integer should be incremented.
-	internalApiVersion: 9
+	internalApiVersion: 10
 };
 var fcViews = FC.views = {};
 
@@ -11873,7 +11873,7 @@ var Calendar = FC.Calendar = Class.extend(EmitterMixin, {
 			start,
 			end,
 			this.opt('timezone'),
-			this.opt('lazyFetching')
+			!this.opt('lazyFetching')
 		);
 	}
 
@@ -14084,7 +14084,8 @@ var EventManager = Class.extend(EmitterMixin, ListenerMixin, {
 		if (
 			force ||
 			!this.currentPeriod ||
-			!this.currentPeriod.isWithinRange(start, end)
+			!this.currentPeriod.isWithinRange(start, end) ||
+			timezone !== this.currentPeriod.timezone
 		) {
 			this.setPeriod( // will change this.currentPeriod
 				new EventPeriod(start, end, timezone)
@@ -14807,7 +14808,6 @@ var EventDef = FC.EventDef = Class.extend(ParsableModelMixin, {
 
 
 	constructor: function(source) {
-		this.uid = String(EventDef.uuid++);
 		this.source = source;
 		this.className = [];
 		this.miscProps = {};
@@ -14941,6 +14941,13 @@ var EventDef = FC.EventDef = Class.extend(ParsableModelMixin, {
 			this.id = EventDef.generateId();
 		}
 
+		if (rawProps._id != null) { // accept this prop, even tho somewhat internal
+			this.uid = String(rawProps._id);
+		}
+		else {
+			this.uid = EventDef.generateId();
+		}
+
 		// TODO: converge with EventSource
 		if ($.isArray(rawProps.className)) {
 			this.className = rawProps.className;
@@ -14988,6 +14995,7 @@ EventDef.generateId = function() {
 
 EventDef.allowRawProps({
 	// not automatically assigned (`false`)
+	_id: false,
 	id: false,
 	className: false,
 	source: false, // will ignored
@@ -15085,6 +15093,11 @@ var SingleEventDef = EventDef.extend({
 
 		if (dateProfile) {
 			this.dateProfile = dateProfile;
+
+			// make sure `date` shows up in the legacy event objects as-is
+			if (rawProps.date != null) {
+				this.miscProps.date = rawProps.date;
+			}
 
 			return superSuccess;
 		}
@@ -16106,6 +16119,8 @@ var FuncEventSource = EventSource.extend({
 	fetch: function(start, end, timezone) {
 		var _this = this;
 
+		this.calendar.pushLoading();
+
 		return Promise.construct(function(onResolve) {
 			_this.func.call(
 				this.calendar,
@@ -16113,6 +16128,8 @@ var FuncEventSource = EventSource.extend({
 				end.clone(),
 				timezone,
 				function(rawEventDefs) {
+					_this.calendar.popLoading();
+
 					onResolve(_this.parseEventDefs(rawEventDefs));
 				}
 			);
@@ -16186,6 +16203,8 @@ var JsonFeedEventSource = EventSource.extend({
 		// don't intercept success/error
 		// tho will be a breaking API change
 
+		this.calendar.pushLoading();
+
 		return Promise.construct(function(onResolve, onReject) {
 			$.ajax($.extend(
 				{}, // avoid mutation
@@ -16195,6 +16214,8 @@ var JsonFeedEventSource = EventSource.extend({
 					data: requestParams,
 					success: function(rawEventDefs) {
 						var callbackRes;
+
+						_this.calendar.popLoading();
 
 						if (rawEventDefs) {
 							callbackRes = applyAll(onSuccess, this, arguments); // redirect `this`
@@ -16210,6 +16231,8 @@ var JsonFeedEventSource = EventSource.extend({
 						}
 					},
 					error: function() {
+						_this.calendar.popLoading();
+
 						applyAll(onError, this, arguments); // redirect `this`
 						onReject();
 					}

@@ -1,5 +1,5 @@
 /*!
- * FullCalendar v3.5.0 Stylesheet
+ * FullCalendar v3.5.1 Stylesheet
  * Docs & License: https://fullcalendar.io/
  * (c) 2017 Adam Shaw
  */
@@ -881,7 +881,7 @@ NOTE: use percentage font sizes or else old IE chokes
 	text-decoration: underline;
 }
 
-.fc-bootstrap3 .fc-divider {
+.fc-bootstrap3 hr.fc-divider {
 	border-color: inherit;
 }
 
