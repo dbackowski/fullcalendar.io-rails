@@ -1,5 +1,5 @@
 /*!
- * FullCalendar v3.5.1 Google Calendar Plugin
+ * FullCalendar v3.6.0 Google Calendar Plugin
  * Docs & License: https://fullcalendar.io/
  * (c) 2017 Adam Shaw
  */
@@ -33,6 +33,12 @@ var GcalEventSource = EventSource.extend({
 	googleCalendarId: null,
 	googleCalendarError: null, // optional function
 	ajaxSettings: null,
+
+
+	constructor: function() {
+		EventSource.apply(this, arguments);
+		this.ajaxSettings = {};
+	},
 
 
 	fetch: function(start, end, timezone) {
@@ -187,8 +193,8 @@ var GcalEventSource = EventSource.extend({
 	},
 
 
-	applyManualRawProps: function(rawProps) {
-		var superSuccess = EventSource.prototype.applyManualRawProps.apply(this, arguments);
+	applyManualStandardProps: function(rawProps) {
+		var superSuccess = EventSource.prototype.applyManualStandardProps.apply(this, arguments);
 		var googleCalendarId = rawProps.googleCalendarId;
 
 		if (googleCalendarId == null && rawProps.url) {
@@ -205,8 +211,8 @@ var GcalEventSource = EventSource.extend({
 	},
 
 
-	applyOtherRawProps: function(rawProps) {
-		this.ajaxSettings = rawProps;
+	applyMiscProps: function(rawProps) {
+		$.extend(this.ajaxSettings, rawProps);
 	}
 
 });
@@ -215,7 +221,7 @@ var GcalEventSource = EventSource.extend({
 GcalEventSource.API_BASE = 'https://www.googleapis.com/calendar/v3/calendars';
 
 
-GcalEventSource.allowRawProps({
+GcalEventSource.defineStandardProps({
 	// manually process...
 	url: false,
 	googleCalendarId: false,
@@ -229,7 +235,7 @@ GcalEventSource.allowRawProps({
 GcalEventSource.parse = function(rawInput, calendar) {
 	var rawProps;
 
-	if (typeof rawInput === 'object') { // long form. might fail in applyManualRawProps
+	if (typeof rawInput === 'object') { // long form. might fail in applyManualStandardProps
 		rawProps = rawInput;
 	}
 	else if (typeof rawInput === 'string') { // short form
