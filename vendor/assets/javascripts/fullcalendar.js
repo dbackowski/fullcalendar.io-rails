@@ -1,5 +1,5 @@
 /*!
- * FullCalendar v3.6.0
+ * FullCalendar v3.6.1
  * Docs & License: https://fullcalendar.io/
  * (c) 2017 Adam Shaw
  */
@@ -19,7 +19,7 @@
 ;;
 
 var FC = $.fullCalendar = {
-	version: "3.6.0",
+	version: "3.6.1",
 	// When introducing internal API incompatibilities (where fullcalendar plugins would break),
 	// the minor version of the calendar should be upped (ex: 2.7.2 -> 2.8.0)
 	// and the below integer should be incremented.
@@ -6936,15 +6936,10 @@ var DateComponent = FC.DateComponent = Component.extend({
 	// Given an event's span (unzoned start/end and other misc data), and the event itself,
 	// slices into segments and attaches event-derived properties to them.
 	// eventSpan - { start, end, isStart, isEnd, otherthings... }
-	// constraintRange allow additional clipping. optional. eventually remove this.
-	eventFootprintToSegs: function(eventFootprint, constraintRange) {
+	eventFootprintToSegs: function(eventFootprint) {
 		var unzonedRange = eventFootprint.componentFootprint.unzonedRange;
 		var segs;
 		var i, seg;
-
-		if (constraintRange) {
-			unzonedRange = unzonedRange.intersect(constraintRange);
-		}
 
 		segs = this.componentFootprintToSegs(eventFootprint.componentFootprint);
 
@@ -14344,10 +14339,11 @@ var JsonFeedEventSource = EventSource.extend({
 
 		return Promise.construct(function(onResolve, onReject) {
 			$.ajax($.extend(
-				{ url: this.url },
+				{}, // destination
 				JsonFeedEventSource.AJAX_DEFAULTS,
 				ajaxSettings,
 				{
+					url: _this.url,
 					data: requestParams,
 					success: function(rawEventDefs) {
 						var callbackRes;
@@ -15889,12 +15885,29 @@ DayGrid.mixin({
 		var dayEnd = dayStart.clone().add(1, 'days');
 		var dayRange = new UnzonedRange(dayStart, dayEnd);
 		var newSegs = [];
-		var i;
+		var i, seg;
+		var slicedRange;
 
 		for (i = 0; i < segs.length; i++) {
-			newSegs.push.apply(newSegs, // append
-				this.eventFootprintToSegs(segs[i].footprint, dayRange)
-			);
+			seg = segs[i];
+			slicedRange = seg.footprint.componentFootprint.unzonedRange.intersect(dayRange);
+
+			if (slicedRange) {
+				newSegs.push(
+					$.extend({}, seg, {
+						footprint: new EventFootprint(
+							new ComponentFootprint(
+								slicedRange,
+								seg.footprint.componentFootprint.isAllDay
+							),
+							seg.footprint.eventDef,
+							seg.footprint.eventInstance
+						),
+						isStart: seg.isStart && slicedRange.isStart,
+						isEnd: seg.isEnd && slicedRange.isEnd
+					})
+				);
+			}
 		}
 
 		// force an order because eventsToSegs doesn't guarantee one
