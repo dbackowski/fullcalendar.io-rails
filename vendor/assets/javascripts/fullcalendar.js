@@ -1,5 +1,5 @@
 /*!
- * FullCalendar v3.6.1
+ * FullCalendar v3.6.2
  * Docs & License: https://fullcalendar.io/
  * (c) 2017 Adam Shaw
  */
@@ -19,7 +19,7 @@
 ;;
 
 var FC = $.fullCalendar = {
-	version: "3.6.1",
+	version: "3.6.2",
 	// When introducing internal API incompatibilities (where fullcalendar plugins would break),
 	// the minor version of the calendar should be upped (ex: 2.7.2 -> 2.8.0)
 	// and the below integer should be incremented.
@@ -8416,7 +8416,7 @@ var View = FC.View = InteractiveDateComponent.extend({
 				this.nowIndicatorTimeoutID = null;
 			}
 			if (this.nowIndicatorIntervalID) {
-				clearTimeout(this.nowIndicatorIntervalID);
+				clearInterval(this.nowIndicatorIntervalID);
 				this.nowIndicatorIntervalID = null;
 			}
 
@@ -10610,8 +10610,6 @@ Calendar.mixin({
 
 
 	unbindViewHandlers: function(view) {
-		this.stopListeningTo(view);
-
 		view.unwatch('titleForCalendar');
 		view.unwatch('dateProfileForCalendar');
 	},
@@ -10673,6 +10671,7 @@ Calendar.mixin({
 		this.unbindViewHandlers(currentView);
 
 		currentView.removeElement();
+		currentView.unsetDate(); // so bindViewHandlers doesn't fire with old values next time
 
 		this.view = null;
 	},
@@ -13086,15 +13085,6 @@ EventDef.defineStandardProps({
 
 EventDef.parse = function(rawInput, source) {
 	var def = new this(source);
-	var calendarTransform = source.calendar.opt('eventDataTransform');
-	var sourceTransform = source.eventDataTransform;
-
-	if (calendarTransform) {
-		rawInput = calendarTransform(rawInput);
-	}
-	if (sourceTransform) {
-		rawInput = sourceTransform(rawInput);
-	}
 
 	if (def.applyProps(rawInput)) {
 		return def;
@@ -14005,10 +13995,7 @@ var EventSource = Class.extend(ParsableModelMixin, {
 		var eventDefs = [];
 
 		for (i = 0; i < rawEventDefs.length; i++) {
-			eventDef = EventDefParser.parse(
-				rawEventDefs[i],
-				this // source
-			);
+			eventDef = this.parseEventDef(rawEventDefs[i]);
 
 			if (eventDef) {
 				eventDefs.push(eventDef);
@@ -14016,6 +14003,21 @@ var EventSource = Class.extend(ParsableModelMixin, {
 		}
 
 		return eventDefs;
+	},
+
+
+	parseEventDef: function(rawInput) {
+		var calendarTransform = this.calendar.opt('eventDataTransform');
+		var sourceTransform = this.eventDataTransform;
+
+		if (calendarTransform) {
+			rawInput = calendarTransform(rawInput);
+		}
+		if (sourceTransform) {
+			rawInput = sourceTransform(rawInput);
+		}
+
+		return EventDefParser.parse(rawInput, this);
 	},
 
 
@@ -16845,6 +16847,7 @@ var TimeGrid = FC.TimeGrid = InteractiveDateComponent.extend(StandardInteraction
 	slatCoordCache: null,
 
 	bottomRuleEl: null, // hidden by default
+	contentSkeletonEl: null,
 	colContainerEls: null, // containers for each column
 
 	// inner-containers for each column where different types of segs live
@@ -16980,6 +16983,12 @@ var TimeGrid = FC.TimeGrid = InteractiveDateComponent.extend(StandardInteraction
 	},
 
 
+	unrenderDates: function() {
+		//this.unrenderSlats(); // don't need this because repeated .html() calls clear
+		this.unrenderColumns();
+	},
+
+
 	renderSkeleton: function() {
 		var theme = this.view.calendar.theme;
 
@@ -16997,7 +17006,7 @@ var TimeGrid = FC.TimeGrid = InteractiveDateComponent.extend(StandardInteraction
 		var theme = this.view.calendar.theme;
 
 		this.slatContainerEl = this.el.find('> .fc-slats')
-			.html(
+			.html( // avoids needing ::unrenderSlats()
 				'<table class="' + theme.getClass('tableGrid') + '">' +
 					this.renderSlatRowHtml() +
 				'</table>'
@@ -17090,6 +17099,11 @@ var TimeGrid = FC.TimeGrid = InteractiveDateComponent.extend(StandardInteraction
 	},
 
 
+	unrenderColumns: function() {
+		this.unrenderContentSkeleton();
+	},
+
+
 	/* Content Skeleton
 	------------------------------------------------------------------------------------------------------------------*/
 
@@ -17113,7 +17127,7 @@ var TimeGrid = FC.TimeGrid = InteractiveDateComponent.extend(StandardInteraction
 				'</td>';
 		}
 
-		skeletonEl = $(
+		skeletonEl = this.contentSkeletonEl = $(
 			'<div class="fc-content-skeleton">' +
 				'<table>' +
 					'<tr>' + cellHtml + '</tr>' +
@@ -17130,6 +17144,18 @@ var TimeGrid = FC.TimeGrid = InteractiveDateComponent.extend(StandardInteraction
 
 		this.bookendCells(skeletonEl.find('tr')); // TODO: do this on string level
 		this.el.append(skeletonEl);
+	},
+
+
+	unrenderContentSkeleton: function() {
+		this.contentSkeletonEl.remove();
+		this.contentSkeletonEl = null;
+		this.colContainerEls = null;
+		this.helperContainerEls = null;
+		this.fgContainerEls = null;
+		this.bgContainerEls = null;
+		this.highlightContainerEls = null;
+		this.businessContainerEls = null;
 	},
 
 
